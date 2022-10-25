@@ -9,12 +9,12 @@ I am not going to go into more depth of what the Mandelbrot set is, since there 
 
 # Motivation
 In the pursuit of creating software that utilizes the different computer's components efficiently, I came across the Mandelbrot Set, which also stunned me by its mathematical beauty. There were already many programs on the Internet which rendered fractals, but I wanted to create one of my own, so I could explore the different approaches to coding the set, and also plot the fractal in unique ways. I've written two C++ programs, one relying on the CPU (central processing unit) for doing the hard work, and the other on the GPU (graphics processing unit). I've compared the two variants and documented the methods I've used. Moreover, I've made it easy for other users who may want to tinker with these programs by providing a config file which determines the way in which the set is drawn to the screen (the GPU version is recommended due to performance concerns). The current features of the program are:
-#Exploring the Mandelbrot Set in a "Google Maps" manner (zoom/pan)
-#Setting custom gradients used for coloring the set
-#Rendering at a higher resolution (supersampling)
-#Performance benchmark (automatic zoom)
-#Taking screenshots of the current region and saving it to the local directory
-#Altering other parameters related to rendering the set in the config file
+- Exploring the Mandelbrot Set in a "Google Maps" manner (zoom/pan)
+- Setting custom gradients used for coloring the set
+- Rendering at a higher resolution (supersampling)
+- Performance benchmark (automatic zoom)
+- Taking screenshots of the current region and saving it to the local directory
+- Altering other parameters related to rendering the set in the config file
 
 # Coding the set
 **Note**: this project (and documentation) has been written in C++, though the code could be replicated in other programming languages.
@@ -127,12 +127,12 @@ For implementation details, look for the <code>[BorderTracer](https://github.com
 **Note:** I've chosen to use the <code>std::deque</code> instead of <code>std::queue</code> over performance concerns.
 
 ## GPU oriented
-Previously, we have seen that parallelism significantly improves performance, so a natural question comes to mind: what if we were able to execute **more** operations at the same time? It turns out that the GPU (graphics processing unit) is specialized in performing rather simple operations in parallel, which comes in handy for our implementation of the Mandelbrot set. In order to run code on the GPU and not on the CPU I used the OpenGL API, through a couple of C++ libraries (GLFW + GLAD). In fact, the actual C++ code (mainly boilerplate code for creating a window, etc.) was executed on the CPU, but the GLAD library made it possible to write a **shader** (a little program that lies on the GPU) in the *OpenGL shading language* (GLSL) which is executed on the **GPU**. In this documentation I will include the GLSL code responsible for plotting the Mandelbrot set. For more information about OpenGL, I strongly recommend the (LearnOpenGL)[https://learnopengl.com/]. website, which made this project possible.
+Previously, we have seen that parallelism significantly improves performance, so a natural question comes to mind: what if we were able to execute **more** operations at the same time? It turns out that the GPU (graphics processing unit) is specialized in performing rather simple operations in parallel, which comes in handy for our implementation of the Mandelbrot set. In order to run code on the GPU and not on the CPU I used the OpenGL API, through a couple of C++ libraries (GLFW + GLAD). In fact, the actual C++ code (mainly boilerplate code for creating a window, etc.) was executed on the CPU, but the GLAD library made it possible to write a **shader** (a little program that lies on the GPU) in the *OpenGL shading language* (GLSL) which is executed on the **GPU**. In this documentation I will include the GLSL code responsible for plotting the Mandelbrot set. For more information about OpenGL, I strongly recommend the [LearnOpenGL](https://learnopengl.com/). website, which made this project possible.
 
 ### Brief overview of the shader code
 The project includes two types of shaders: the **vertex** and **fragment** shader. The **vertex** shader is responsible for setting up the area of the screen that is being rendered to (achieved by drawing **two** triangles composing a rectangle covering the whole screen). The **fragment** shader takes as input every pixel and outputs its color, which, in this case, is based on the iteration count of the point corresponding to that pixel's XY coordinates in the screen space.
 .
-For a practical introduction to shaders, visit [https://learnopengl.com/Getting-started/Shaders LearnOpenGL-Shaders].
+For a practical introduction to shaders, visit [LearnOpenGL-Shaders](https://learnopengl.com/Getting-started/Shaders).
 
 The vertex shader code is pretty much boilerplate (standard), as it simply sets up the drawing area (a full-screen quad). Thus, it is going to need some *vertex data* which comprises of the vertices of the 2 triangles. This part is covered in the previous link.
 
