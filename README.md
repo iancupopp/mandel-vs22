@@ -32,13 +32,13 @@ while (x * x + y * y <= 4 && iteration < max_iteration) {
 colorPixel(iteration);
 ```
 
-As you have probably seen already, we are denoting each complex number in the coordinate system c(x0, y0) a pixel on the screen and assign a color to that pixel according to the number of iterations it takes it to either diverge or reach the *max_iteration* upper bound (since we cannot continue iterating forever). As we are treating every pixel individually, we might be able to implement some optimizations, such as *parallel computing*, to give a little insight on what we are about to discuss. Moreover, we can reduce the number of multiplications we make (as they are more time-consuming than additions) and also skip some points because we know for sure are in the set, or because their iteration count can be deduced by others around it (a technique known as *border tracing*).
+As you have probably seen already, we are denoting each complex number in the coordinate system c(x0, y0) a pixel on the screen and assign a color to that pixel according to the number of iterations it takes it to either diverge or reach the ```max_iteration``` upper bound (since we cannot continue iterating forever). As we are treating every pixel individually, we might be able to implement some optimizations, such as *parallel computing*, to give a little insight on what we are about to discuss. Moreover, we can reduce the number of multiplications we make (as they are more time-consuming than additions) and also skip some points because we know for sure are in the set, or because their iteration count can be deduced by others around it (a technique known as *border tracing*).
 
 ## CPU oriented
 ### Multithreading
 The most general optimization we can implement is multithreading. Since computing the number of iterations of each point is independent from the others, we can spread the processing among the multiple threads of our CPU. An initial idea of how we are going to go about this is simply to take the whole screen and divide it into, let's say, 4 equal horizontal tiles (assuming our CPU has 4 threads). Now we can assign each portion of the screen to each thread in our CPU. However, depending on the region of the Mandelbrot that we are rendering, some threads might be able to finish their job faster and then simply do nothing, waiting for the others to complete their tasks, thus impacting performance. In this case, each frame would finish rendering only when the last tile is done.
 
-However, a workaround fortunately exists. We are going to divide the screen into more than 4 tiles, for instance, 16 of them, and create a ***thread pool***. What this does is it assigns each tile to a thread and, whenever a thread finishes its job and becomes available, it automatically reassigns it the next unprocessed tile. Thus, we were able to noticeably increase performance! Certainly, performance may vary depending on the scenario, but still, it is a major improvement. You might be asking yourself how we are going to achieve this. Thankfully, the library we are going to use, OpenMP, has already taken care of this, so we wouldn't have to worry about changing our code too much. Assuming we built a function ***drawTile(tileIndex)*** that takes the number of the tile and draws it to the screen, we would proceed in the following way:
+However, a workaround fortunately exists. We are going to divide the screen into more than 4 tiles, for instance, 16 of them, and create a ***thread pool***. What this does is it assigns each tile to a thread and, whenever a thread finishes its job and becomes available, it automatically reassigns it the next unprocessed tile. Thus, we were able to noticeably increase performance! Certainly, performance may vary depending on the scenario, but still, it is a major improvement. You might be asking yourself how we are going to achieve this. Thankfully, the library we are going to use, OpenMP, has already taken care of this, so we wouldn't have to worry about changing our code too much. Assuming we built a function ```drawTile(tileIndex)``` that takes the number of the tile and draws it to the screen, we would proceed in the following way:
 
 ```c++
 #pragma omp parallel for
@@ -46,7 +46,7 @@ for (int i = 0; i < tile_count; i++)
   drawTile(i);
 ```
 
-The highlighted pragma directive essentially tells the compiler to split the *for* loop up between multiple threads.
+The highlighted pragma directive essentially tells the compiler to split the ```for``` loop up between multiple threads.
 
 ### SIMD
 We are able to further parallelize our algorithm by making use of SIMD (Single instruction, multiple data). This technology allows us to perform the same operation (for instance: addition, subtraction, multiplication) on more than one variable at the same time. For instance, this could be useful when adding up two arrays simultaneously, as it would be much faster than adding up each of the arrays' elements individually. 
@@ -104,10 +104,12 @@ Since we are processing four points at the same time, we want to stop either whe
 This optimization won't take advantage of the newer technologies present in modern CPU's, but rather of a mathematical property of the Mandelbrot set. This property states that the Mandelbrot set is connected, meaning that if we are able to trace the border of a closed shape with the same color on its contour, we can simply fill it in after with that color. This means that all the pixels which lie inside that shape are basically "skipped", thus pruning our computation. Also, recall that we color each point (corresponding to a pixel on the screen) according to the number of iterations it took it to escape (or <code>max_iterations</code> if it doesn't).
 
 Tracing these borders is done by running an algorithm similar to BFS (breadth-first search). The method implies maintaining 2 queues:
-;scan_queue
-: This queue contains the "scanned" pixels, which have already been processed (their iteration count has been calculated)
-;calc_queue
-: This queue contains the "to-be" processed pixels, of which we know nothing about. These pixels are pushed to the <code>scan_queue</code> afterwards. The reason this queue is required is because the pixels are processed in a somewhat "offline" manner (recall that we compute the iteration count of 4 pixels at a time using SIMD).
+- **```scan_queue```**
+
+    > This queue contains the "scanned" pixels, which have already been processed (their iteration count has been calculated)
+- **```calc_queue```**
+
+    > This queue contains the "to-be" processed pixels, of which we know nothing about. These pixels are pushed to the <code>scan_queue</code> afterwards. The reason this queue is required is because the pixels are processed in a somewhat "offline" manner (recall that we compute the iteration count of 4 pixels at a time using SIMD).
 
 **Note:** Flushing the <code>calc_queue</code> means processing every pixel in it (by using buffers of up to 4 pixels). At the end of this operation, the <code>calc_queue</code> is empty. 
 
