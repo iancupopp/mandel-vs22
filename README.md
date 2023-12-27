@@ -1,13 +1,20 @@
 <strong>Welcome to Iancu's Mandelbrot Project!</strong>
 
+![](https://github.com/iancupopp/mandel-vs22/blob/master/pictures/palette.png?raw=true)
 # What is the Mandelbrot set?
 In its most formal, Wikipedia definition:
-<blockquote>The Mandelbrot set is the set of complex numbers $c$ for which the function $f_c(z)=z^2+c$ does not diverge to infinity when iterated from $z=0$, i.e., for which the sequence $f_c(0)$, $f_c(f_c(0))$, etc., remains bounded in absolute value.</blockquote>
+
+The Mandelbrot set is the set of complex numbers $c$ for which the function $f_c(z)=z^2+c$ does not diverge to infinity when iterated from $z=0$, i.e., for which the sequence $f_c(0)$, $f_c(f_c(0))$, etc., remains bounded in absolute value.
+
 In less formal terms, the Mandelbrot Set is the set of all the complex numbers that hold a certain property. A complex number consists of a real and imaginary part, which can be represented on the XY axis, that is why in most representations, you can see a central black bulb (corresponding to the complex numbers inside the set). The points on the XY axis which hold this property are usually assigned the color black, on a white background (white - points that do not belong to the set). The property held by the points in the set is that we can repeatedly apply the function $f_c(z) = z^2+c$ to the complex number $c$, with $z=0$ initially so that $z$ remains bounded, that it doesn't diverge. To color the Mandelbrot with something other than black and white, we can check *when* $z$ exits the orbit, and assign colors according to the iteration count (the number of times we applied the function $f$).
 
 I am not going to go into more depth of what the Mandelbrot set is, since there are tons of resources online with probably better explanations, but I recommend the [Numberphile](https://www.youtube.com/c/numberphile) YouTube videos on the Mandelbrot set to give intuition and an overall idea of what is going on.
 
 # Motivation
+
+Mandelbrot's beauty unfolds as we zoom in:
+![](https://github.com/iancupopp/mandel-vs22/raw/master/pictures/sequence%20panel.png)
+
 In the pursuit of creating software that utilizes the different computer's components efficiently, I came across the Mandelbrot Set, which also stunned me by its mathematical beauty. There were already many programs on the Internet which rendered fractals, but I wanted to create one of my own, so I could explore the different approaches to coding the set, and also plot the fractal in unique ways. I've written two C++ programs, one relying on the CPU (central processing unit) for doing the hard work, and the other on the GPU (graphics processing unit). I've compared the two variants and documented the methods I've used. Moreover, I've made it easy for other users who may want to tinker with these programs by providing a config file which determines the way in which the set is drawn to the screen (the GPU version is recommended due to performance concerns). The current features of the program are:
 - Exploring the Mandelbrot Set in a "Google Maps" manner (zoom/pan)
 - Setting custom gradients used for coloring the set
@@ -101,6 +108,10 @@ Since we are processing four points at the same time, we want to stop either whe
 **Note:** Because we are using intrinsics the traditional "while" loop has been replaced by an <code>if</code>/<code>goto</code> combo.
 
 ### Border tracing
+Border tracing in action:
+
+![](https://github.com/iancupopp/mandel-vs22/raw/master/pictures/BT.gif)
+
 This optimization won't take advantage of the newer technologies present in modern CPU's, but rather of a mathematical property of the Mandelbrot set. This property states that the Mandelbrot set is connected, meaning that if we are able to trace the border of a closed shape with the same color on its contour, we can simply fill it in after with that color. This means that all the pixels which lie inside that shape are basically "skipped", thus pruning our computation. Also, recall that we color each point (corresponding to a pixel on the screen) according to the number of iterations it took it to escape (or <code>max_iterations</code> if it doesn't).
 
 Tracing these borders is done by running an algorithm similar to BFS (breadth-first search). The method implies maintaining 2 queues:
@@ -215,7 +226,123 @@ You may have noticed that the array <code>palette</code> is being fed into the f
 **Note:** These gradient points are provided in the config file (see **Configuration**).
 
 
-### Supersampling
-To obtain a higher quality image, we are able to render the Mandelbrot at a higher resolution (i.e. 4x the width/height) and then downscale the image to the window's resolution. We are going to achieve by rendering the high-res image to and off-screen **framebuffer** (<code>FBO</code>) and
+### Supersampling (SSAA)
+To obtain a higher quality image (through an "[anti-aliasing](https://en.wikipedia.org/wiki/Supersampling)" technique), we are able to render the Mandelbrot at a higher resolution (i.e. 4x the width/height) and then downscale the image to the window's resolution. We are going to achieve this by rendering the high-res image to and texture bound to an off-screen **framebuffer** (<code>FBO</code>). Then, we are going to use the <code>GL_LINEAR</code> function to map this high-res texture to a lower-res one (i.e. our screen/the <code>VBO</code>).
 
-## Benchmark
+Code for setting up the ```FBO```:
+```c++
+//Create & setup FBO
+  //The additional FBO is created (besides the default one) to allow for 
+  //rendering at a higher resolution (supersampling)
+  unsigned int FBO;
+  glGenFramebuffers(1, &FBO);
+
+
+  //Setting up the texture attachment for the framebuffer (mainly used for SSAA or rendering to a resolution
+  //which is independent from the window resolution (offscreen rendering)
+  unsigned int texture;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenWidth, screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+
+  //Attach texture to FBO
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+```
+
+In addition to this FBO, we will need another shader program, namely ```screenShader```. This program essentially handles vertex data to be rendered to the actual screen, while '''shader''' is used for rendering to the '''FBO''(texture).
+
+Code for rendering the Mandelbrot (SSAA):
+```c++
+ //Render mandelbrot to FBO
+    //std::cout << screenWidth << " " << screenHeight << "\n";
+    glViewport(0, 0, screenWidth, screenHeight);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+    //Bind back default FBO
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glDisable(GL_DEPTH_TEST);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    //Render mandelbrot texture to screen
+    //Also, switch to the screenShader (which chooses the interpolated color from the texture)
+    screenShader.use();
+    screenShader.setUniform2f("viewportDimensions", windowWidth, windowHeight);
+
+    glBindVertexArray(VAO);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glViewport(0, 0, windowWidth, windowHeight);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+```
+
+Of course, other details have to be taken into account - such as setting a different (higher) resolution for the texture than the screen, etc. However, I am not going to go into such depth for simplicity's sake. I encourage you to check out the source code (main.cpp file) for a full explanation (I have added useful comments).
+
+### Adding Kernels
+As mentioned above, as a result of utilizing SSAA we are also utilizing another shader program '''shaderScreen''', and along with it another fragment shader, '''fragScreen.glsl'''. Since we are practically only "outputting" the pixels of the downsampled texture, we are able to do some post-processing on them, such as applying kernels (see [Computerphile Kernel Video](https://www.youtube.com/watch?v=uihBwtPIBxM) for intuition & quick explanation behind image kernels). Through experimenting with edge-detection kernels, my program has produced the animation below. To achieve the pulsating effect, the code is continuously shifting the color pallete (check **Configuration** for <code>palette_cycle_step</code>).
+
+![](https://github.com/iancupopp/mandel-vs22/raw/master/pictures/pulsating.gif)
+
+# Configuration
+**Note:** The configuration file ("mandel.cfg") only applies to the OpenGL/GPU project (mandel-vs22 repository).
+
+Sample config file:
+```cfg
+#Display
+fullscreen = true
+screen_width = 1920
+screen_height = 1080
+
+#Supersampling (SSAA)
+#Example: if "scale = 2", then the Mandelbrot will be rendered at (2xWidth) x (2xHeight) resolution
+scale = 2
+
+#Palette gradient - linearly interpolates between the RGB values of the points
+#Format: "gradient_point" + number + position(0-99),r(0-255),g(0-255),b(0-255)
+#Up to 20 gradient points can be added
+gradient_point1 = 0,0,7,100
+gradient_point2 = 16,32,107,203
+gradient_point3 = 42,237,255,255
+gradient_point4 = 64.25,255,170,0
+gradient_point5 = 85.75,0,2,0
+
+#Number of colors of the palette
+#If the iteration count exceeds this number, the palette repeats itself
+#Thus, decreasing this value will make the colors alternate faster
+n_colors = 20
+
+#Determines how fast the palette cycles (disco effect)
+#Example: if "pallete_cycle_step = 1", the iteration count for all pixels will be offset by 1 each iteration, thus creating the "disco effect"
+palette_cycle_step = 0
+
+#Default number of iterations
+max_iterations = 64
+
+#Iteration increase/decrease step
+iteration_step = 32
+
+#Zoom in center (coordinates of where to zoom)
+x_zoom = -1.256618
+y_zoom = 0.030860
+
+#Apply smoothing between consecutive iteration levels (1 - true/0 - false)
+smooth = false
+
+zoom_speed = 1
+```
+
+# Benchmark
+
+During a zoom to (-0.72993051140825282, -0.24047174011417854), 947 frames were generated by both programs (a slightly modified version of the CPU code making 8 float operations simultaneously on AVX2 while also border tracing vs. the OpenGL GPU code). 
+
+|   | CPU  | GPU | Improvement (GPU vs. CPU) |
+| --- | --- | --- | --- |
+| Average Frame Time (ms)  | 1.86819  | 80.472017 | 43.074 times better |
+| Biggest Frame Time Difference (by **ratio**, in ms) | 136.000000 | 1.229728 | 59.37 times better |
+| Smallest Frame Time Difference (by **ratio**, in ms) | 16.000000 | 1.229728 | 13.01 times better |
+
+This benchmark is relevant to the performance difference a user will encounter when using the 2 programs to explore the Mandelbrot Set by zooming. However, in deeper zooms, the GPU version of the code runs over 100 times better than the CPU code.
